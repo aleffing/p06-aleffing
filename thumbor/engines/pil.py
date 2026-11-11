@@ -241,6 +241,14 @@ class Engine(BaseEngine):
 
         return ".jpeg"
 
+    def keep_transparent_index(self, source_alpha):
+        # quantize() drops the alpha of the source. Mark one palette entry
+        # as transparent so the GIF writer keeps the transparency index.
+        for index, alpha in zip(self.image.getdata(), source_alpha.getdata()):
+            if alpha == 0:
+                self.image.info["transparency"] = index
+                return
+
     # TODO: Refactor this
     def read(  # noqa
         self, extension=None, quality=None
@@ -269,6 +277,12 @@ class Engine(BaseEngine):
                 if self.image.mode not in ("L", "P", "RGB", "RGBA"):
                     self.image = self.image.convert("RGBA")
 
+                source_alpha = (
+                    self.image.getchannel("A")
+                    if "A" in self.image.mode
+                    else None
+                )
+
                 # libimagequant might not be enabled on compile time
                 # but it's better than default octree for RGBA images
                 quantize_method = (
@@ -277,6 +291,8 @@ class Engine(BaseEngine):
                     else None
                 )
                 self.image = self.image.quantize(method=quantize_method)
+                if source_alpha is not None:
+                    self.keep_transparent_index(source_alpha)
 
         ext = requested_extension or self.get_default_extension()
 
